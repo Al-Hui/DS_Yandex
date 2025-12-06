@@ -17,16 +17,16 @@ class UniversalRegressionPipeline:
     def __init__(self, target_column, numeric_features=None, categorical_features=None,
                  models=None, param_grids=None, scoring='neg_mean_squared_error', cv=5, random_state=42):
         """
-        Universal Pipeline for Regression Tasks.
+        Универсальный пайплайн для задач регрессии.
 
         Args:
-            target_column (str): Name of the target variable.
-            numeric_features (list): List of numerical column names. If None, auto-detected.
-            categorical_features (list): List of categorical column names. If None, auto-detected.
-            models (dict): Dictionary of model instances. If None, defaults are used.
-            param_grids (dict): Dictionary of parameter grids for GridSearchCV.
-            scoring (str): Scoring metric for optimization.
-            cv (int): Number of cross-validation folds.
+            target_column (str): Название целевой переменной.
+            numeric_features (list): Список названий численных столбцов. Если None, определяется автоматически.
+            categorical_features (list): Список названий категориальных столбцов. Если None, определяется автоматически.
+            models (dict): Словарь экземпляров моделей. Если None, используются модели по умолчанию.
+            param_grids (dict): Словарь сеток параметров для GridSearchCV.
+            scoring (str): Метрика оценки для оптимизации.
+            cv (int): Количество фолдов кросс-валидации.
             random_state (int): Random seed.
         """
         self.target_column = target_column
@@ -38,7 +38,7 @@ class UniversalRegressionPipeline:
         self.best_models = {}
         self.results = {}
 
-        # Default models if not provided
+        # Модели по умолчанию, если не предоставлены
         if models is None:
             self.models = {
                 'LinearRegression': LinearRegression(),
@@ -49,7 +49,7 @@ class UniversalRegressionPipeline:
         else:
             self.models = models
 
-        # Default parameter grids if not provided
+        # Сетки параметров по умолчанию, если не предоставлены
         if param_grids is None:
             self.param_grids = {
                 'LinearRegression': {},
@@ -70,21 +70,21 @@ class UniversalRegressionPipeline:
 
     def fit(self, df):
         """
-        Fits the pipeline to the dataframe.
+        Обучает пайплайн на датафрейме.
         """
         X = df.drop(columns=[self.target_column])
         y = df[self.target_column]
 
-        # Auto-detect features if not provided
+        # Автоматическое определение признаков, если они не указаны
         if self.numeric_features is None:
-            self.numeric_features = X.select_dtypes(include=['int64', 'float64']).columns.tolist()
+            self.numeric_features = X.select_dtypes(include=['number']).columns.tolist()
         if self.categorical_features is None:
             self.categorical_features = X.select_dtypes(include=['object', 'category']).columns.tolist()
 
-        logger.info(f"Numeric features: {self.numeric_features}")
-        logger.info(f"Categorical features: {self.categorical_features}")
+        logger.info(f"Численные признаки: {self.numeric_features}")
+        logger.info(f"Категориальные признаки: {self.categorical_features}")
 
-        # Preprocessing Pipeline
+        # Пайплайн предобработки
         numeric_transformer = Pipeline(steps=[
             ('imputer', SimpleImputer(strategy='median')),
             ('scaler', StandardScaler())
@@ -101,33 +101,33 @@ class UniversalRegressionPipeline:
                 ('cat', categorical_transformer, self.categorical_features)
             ])
 
-        # Train/Test Split
+        # Разделение на обучающую и тестовую выборки
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=self.random_state)
 
         results_list = []
 
         for name, model in self.models.items():
-            logger.info(f"Training {name}...")
+            logger.info(f"Обучение {name}...")
 
-            # Create full pipeline
+            # Создание полного пайплайна
             pipe = Pipeline(steps=[('preprocessor', self.preprocessor),
                                    ('regressor', model)])
 
-            # Grid Search
+            # Поиск по сетке (Grid Search)
             if name in self.param_grids and self.param_grids[name]:
                 grid = GridSearchCV(pipe, self.param_grids[name], cv=self.cv, scoring=self.scoring, n_jobs=-1)
                 grid.fit(X_train, y_train)
                 best_model = grid.best_estimator_
                 best_params = grid.best_params_
-                logger.info(f"Best params for {name}: {best_params}")
+                logger.info(f"Лучшие параметры для {name}: {best_params}")
             else:
                 pipe.fit(X_train, y_train)
                 best_model = pipe
-                best_params = "Default"
+                best_params = "По умолчанию"
 
             self.best_models[name] = best_model
 
-            # Evaluate
+            # Оценка качества
             y_pred = best_model.predict(X_test)
             metrics = self._evaluate(y_test, y_pred)
             metrics['Model'] = name
@@ -135,7 +135,7 @@ class UniversalRegressionPipeline:
             results_list.append(metrics)
 
         self.results = pd.DataFrame(results_list)
-        logger.info("Training complete.")
+        logger.info("Обучение завершено.")
         return self.results
 
     def _evaluate(self, y_true, y_pred):
@@ -152,23 +152,23 @@ class UniversalRegressionPipeline:
 
     def predict(self, df, model_name=None):
         """
-        Predict using the best trained model.
-        If model_name is None, uses the best model based on R2 score from training.
+        Предсказание с использованием лучшей обученной модели.
+        Если model_name равен None, используется лучшая модель на основе оценки R2 при обучении.
         """
         if not self.best_models:
-            raise ValueError("Pipeline not fitted. Call fit() first.")
+            raise ValueError("Пайплайн не обучен. Сначала вызовите fit().")
 
         if model_name is None:
-            # Select best model based on R2
+            # Выбор лучшей модели по R2
             best_model_name = self.results.loc[self.results['R2'].idxmax()]['Model']
-            logger.info(f"Using best model: {best_model_name}")
+            logger.info(f"Используется лучшая модель: {best_model_name}")
             model = self.best_models[best_model_name]
         else:
             if model_name not in self.best_models:
-                raise ValueError(f"Model {model_name} not found. Available: {list(self.best_models.keys())}")
+                raise ValueError(f"Модель {model_name} не найдена. Доступные: {list(self.best_models.keys())}")
             model = self.best_models[model_name]
 
-        # Ensure we only have feature columns (in case target is present but ignored, usually predict expects X)
+        # Убедимся, что у нас есть только столбцы признаков (если целевая переменная присутствует, но игнорируется)
         if self.target_column in df.columns:
             X = df.drop(columns=[self.target_column])
         else:
@@ -179,19 +179,19 @@ class UniversalRegressionPipeline:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    # Example Usage
+    # Пример использования
     from sklearn.datasets import make_regression
 
-    # Generate synthetic data
+    # Генерация синтетических данных
     X, y = make_regression(n_samples=500, n_features=10, noise=0.1, random_state=42)
     df = pd.DataFrame(X, columns=[f"feature_{i}" for i in range(10)])
     df['target'] = y
 
-    # Introduce some missing values and categorical features for testing
+    # Введение пропущенных значений и категориальных признаков для тестирования
     df['category'] = np.random.choice(['A', 'B', 'C'], size=len(df))
     df.loc[0:10, 'feature_0'] = np.nan
 
     pipeline = UniversalRegressionPipeline(target_column='target')
     results = pipeline.fit(df)
-    print("\nResults:")
+    print("\nРезультаты:")
     print(results)
